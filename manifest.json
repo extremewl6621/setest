@@ -9,7 +9,7 @@
     {
       "id": "cehennem",
       "name": "HDFilmCehennemi",
-      "script": "https://raw.githubusercontent.com/KULLANICI_ADIN/iptv-plugins/main/plugins/cehennem.js",
+      "script": "https://raw.githubusercontent.com/extremewl6621/setest/refs/heads/main/plugins/cehennem.js",
       "base_url": "https://www.hdfilmcehennemi.nl",
       "legacy_hosts": [
         "cehennem.svp.com.tr"
