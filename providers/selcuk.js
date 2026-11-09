@@ -1,19 +1,7 @@
-/* Selçukflix sağlayıcısı (selcukflix.py'nin JS karşılığı — PoW dahil)
- *
- * Akış:
- *   film/dizi sayfası
- *     -> enc (AES-CBC + PBKDF2-SHA512 999 iter) decrypt
- *     -> iframe
- *     -> NP_CONFIG / source2.php / JS packer / m3u8 regex
- *     -> PoW gate.n çöz (SHA256 brute-force) -> &p=<n>
- *     -> master.m3u8 + altyazılar (TR Forced / EN Forced / TR / EN)
- *
- * Host tarafı: /stream /fetch /subs /subs_playlist /subs_segment route'ları
- * Bu dosya yalnızca resolve() sözleşmesini karşılar.
- */
+/* Selçukflix sağlayıcısı (selcukflix.py'nin tam JS karşılığı — PoW ve AES-CBC dahil) */
 var BASE = "https://selcukflix.app";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
-var CF_CLEARANCE = ""; // host env ile doldurabilir; boşsa cookie gönderilmez
+var CF_CLEARANCE = "";
 var DEFAULT_PICHIVE_REFERER = "https://four.pichive.online/";
 
 function log(m) { host.log("[selcuk] " + m); }
@@ -162,7 +150,6 @@ function solvePow(gateN, maxIter) {
     var ns = utf8Bytes(String(n));
     var input = ns.concat(pipe, POW_SALT_BYTES, pipe, gateBytes);
     var h = sha256Bytes(input);
-    // word2 = big-endian uint32 from h[8..11]
     var w2 = ((h[8] << 24) | (h[9] << 16) | (h[10] << 8) | h[11]) >>> 0;
     if ((w2 >>> 20) === 0) return String(n);
   }
@@ -323,9 +310,6 @@ function aesCbcDecrypt(cipherBytes, keyBytes, ivBytes) {
   return out;
 }
 
-// ============================================================================
-// enc payload decrypt (PBKDF2-SHA512 999 + AES-CBC)
-// ============================================================================
 function decryptEncPayload(enc, k) {
   try {
     var ciphertext = b64ToBytes(enc.ciphertext);
@@ -359,9 +343,6 @@ function extractDurationSeconds(html) {
   return null;
 }
 
-// ============================================================================
-// Dean Edwards packer
-// ============================================================================
 function baseEncode(num, base) {
   var digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
   if (num === 0) return digits.charAt(0);
@@ -388,9 +369,6 @@ function evaluatePacker(htmlContent) {
   return unpacked ? htmlContent + "\n" + unpacked : htmlContent;
 }
 
-// ============================================================================
-// NP_CONFIG parse
-// ============================================================================
 function parseNpConfig(html) {
   var idx = html.indexOf("NP_CONFIG");
   if (idx === -1) return null;
@@ -410,9 +388,6 @@ function parseNpConfig(html) {
   try { return JSON.parse(html.slice(brace, end)); } catch (e) { return null; }
 }
 
-// ============================================================================
-// Altyazı dil / isim
-// ============================================================================
 function guessSubLangForced(label, vttUrl) {
   var hay = (label + " " + vttUrl).toLowerCase();
   var forced = hay.indexOf("forced") >= 0 || hay.indexOf("zorunlu") >= 0;
@@ -436,9 +411,6 @@ function subDisplayName(lang, forced, used) {
   return used[base] === 1 ? base : base + " " + used[base];
 }
 
-// ============================================================================
-// Video başlıkları
-// ============================================================================
 function videoHeaders(targetUrl, referer, isIframe) {
   var tHost = (/^https?:\/\/([^\/]+)/.exec(targetUrl) || [])[1] || "";
   var rHost = (/^https?:\/\/([^\/]+)/.exec(referer) || [])[1] || "";
@@ -470,9 +442,6 @@ function videoHeaders(targetUrl, referer, isIframe) {
   return h;
 }
 
-// ============================================================================
-// İframe oynatıcı çözümleme
-// ============================================================================
 function resolveEmbedPlayer(iframeHtml, iframeUrl) {
   var subs = [], seen = {};
   iframeHtml = evaluatePacker(iframeHtml);
@@ -485,17 +454,14 @@ function resolveEmbedPlayer(iframeHtml, iframeUrl) {
     subs.push({ label: label, url: url });
   }
 
-  // 1) file/src ...vtt
   var re = /["']?(?:file|src)["']?\s*:\s*["']([^"']+\.vtt[^"']*)["']/g, m;
   while ((m = re.exec(norm))) addSub(/forced/i.test(m[1]) ? "Türkçe (Forced)" : "Türkçe", m[1]);
 
-  // 2) track.php?v=
   re = /["']([^"']*track\.php\?[^"']+)["']/g;
   while ((m = re.exec(norm))) {
     if (m[1].indexOf("v=") >= 0 && !/v=$/.test(m[1])) addSub("Türkçe Altyazı", m[1]);
   }
 
-  // 3) source_key
   var keyM = /(?:window\.)?openPlayer\(\s*['"]([^'"]+)['"]/.exec(iframeHtml)
           || /source2\.php\?v=([a-zA-Z0-9+/=_-]+)/.exec(iframeHtml)
           || /player\(\s*['"]([^'"]+)['"]/.exec(iframeHtml);
@@ -524,7 +490,6 @@ function resolveEmbedPlayer(iframeHtml, iframeUrl) {
     }
   }
 
-  // 4) source2.php fallback
   if (sourceKey && !master) {
     try {
       var srcUrl = urljoin(iframeUrl, "source2.php") + "?v=" + encodeURIComponent(sourceKey);
@@ -545,16 +510,14 @@ function resolveEmbedPlayer(iframeHtml, iframeUrl) {
           }
         }
       }
-    } catch (e) { log("source2 hatası: " + e); }
+    } catch (e) {}
   }
 
-  // 5) m3u8 regex fallback
   if (!master) {
     var m3 = /file\s*:\s*["']([^"']+\.m3u8[^"']*)["']/.exec(iframeHtml) || /(https?::?[^"'\s]+\.m3u8[^"'\s]*)/.exec(iframeHtml);
     if (m3) master = normalizeUrl(m3[1]);
   }
 
-  // 6) hotlinger/dplayer fallback
   if (!subs.length && /hotlinger|dplayer/.test(iframeUrl)) {
     var vm = /v=([a-zA-Z0-9_-]{8,})/.exec(iframeUrl);
     if (vm) {
@@ -567,9 +530,6 @@ function resolveEmbedPlayer(iframeHtml, iframeUrl) {
   return { master: master, subs: subs };
 }
 
-// ============================================================================
-// Sayfa adayları
-// ============================================================================
 function getPageCandidates(path) {
   var clean = String(path || "").replace(/^\/+|\/+$/g, "");
   var isSeries = /^dizi\//.test(clean) || /\/sezon/.test(clean) || /-sezon/.test(clean) || /-bolum/.test(clean);
@@ -594,9 +554,6 @@ function getPageCandidates(path) {
   return out;
 }
 
-// ============================================================================
-// Ana resolve
-// ============================================================================
 function resolve(req) {
   var input = String(req.slug || "").trim();
   if (!input) throw new Error("Boş slug");
@@ -634,7 +591,6 @@ function resolve(req) {
       var resolved = resolveEmbedPlayer(iframeRes.text, iframeUrl);
       if (!resolved.master) continue;
 
-      // ===== PoW =====
       var powAns = "";
       try {
         var np = parseNpConfig(iframeRes.text);
@@ -650,27 +606,21 @@ function resolve(req) {
               resolved.subs[si].url = appendPow(resolved.subs[si].url, powAns);
             }
           }
-        } else {
-          log("PoW gate.n yok, atlanıyor");
         }
-      } catch (pe) { log("PoW hatası: " + pe); }
-      // ===== /PoW =====
+      } catch (pe) {}
 
       if (!duration) duration = estimateDuration(resolved.master, iframeUrl);
 
-      // Altyazıları dil/forced etiketiyle yeniden isimlendir
       var used = {}, normSubs = [];
       for (var k = 0; k < resolved.subs.length; k++) {
         var g = guessSubLangForced(resolved.subs[k].label, resolved.subs[k].url);
-        normSubs.push({
+        normSubs.previousPush || normSubs.push({
           label: subDisplayName(g.lang, g.forced, used),
           lang: g.lang,
           forced: g.forced,
           url: resolved.subs[k].url
         });
       }
-
-      log("çözüldü: " + resolved.master.substring(0, 120) + " | altyazı: " + normSubs.length + (powAns ? " | p=" + powAns : ""));
 
       var ttl = 6 * 3600;
       var em = /[?&]e=(\d+)/.exec(resolved.master);
@@ -693,9 +643,6 @@ function resolve(req) {
   throw new Error("Hiçbir sayfadan stream çözülemedi: " + input);
 }
 
-// ============================================================================
-// Süre tahmini (master -> variant playlist -> #EXTINF toplam)
-// ============================================================================
 function estimateDuration(masterUrl, referer) {
   try {
     var r = host.fetch(masterUrl, { headers: videoHeaders(masterUrl, referer, false), timeout: 12 });
