@@ -1,4 +1,4 @@
-/* Selçukflix sağlayıcısı - Tam AES-CBC, PBKDF2-SHA512 ve iframe çözücülü JS sürümü */
+/* Selçukflix sağlayıcısı */
 var BASE = "https://selcukflix.app";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -19,119 +19,14 @@ function urljoin(base, rel) {
   return origin + path.replace(/[^\/]*$/, "") + rel;
 }
 
-// ---------- Base64 & Hex Helperler ----------
-function base64ToBytes(base64) {
-  var binString = atob(base64);
-  var bytes = new Uint8Array(binString.length);
-  for (var i = 0; i < binString.length; i++) {
-    bytes[i] = binString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function hexToBytes(hex) {
-  var bytes = new Uint8Array(hex.length / 2);
-  for (var i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
-  }
-  return bytes;
-}
-
-function bytesToString(bytes) {
-  var result = "";
-  for (var i = 0; i < bytes.length; i++) {
-    result += String.fromCharCode(bytes[i]);
-  }
-  return result;
-}
-
-// ---------- Şifreli Payload Ayıklama ve Çözme ----------
-function extractEncFromHtml(html) {
-  var m = /\\"enc\\"\s*:\s*\{\s*\\"ciphertext\\"\s*:\s*\\"([^"\\]+)\\"\s*,\s*\\"iv\\"\s*:\s*\\"([^"\\]+)\\"\s*,\s*\\"salt\\"\s*:\s*\\"([^"\\]+)\\"/.exec(html);
-  if (!m) {
-    m = /"enc"\s*:\s*\{\s*"ciphertext"\s*:\s*"([^"]+)"\s*,\s*"iv"\s*:\s*"([^"]+)"\s*,\s*"salt"\s*:\s*"([^"]+)"/.exec(html);
-  }
-  if (!m) return null;
-
-  var enc = { ciphertext: m[1], iv: m[2], salt: m[3] };
-  var k = null;
-
-  var km = /\\"k\\"\s*:\s*\\"([^"\\]{10,80})\\"/.exec(html) || /"k"\s*:\s*"([^"]{10,80})"/.exec(html);
-  if (km) k = km[1];
-
-  return { enc: enc, k: k };
-}
-
-// Standart pure JS AES-CBC / PBKDF2 simülasyonu ve iframe url çıkarma
-function decryptPayload(enc, kStr) {
-  // Python scriptindeki decrypt_enc_payload mantığı:
-  // Eğer QuickJS içinde yerleşik crypto yoksa, bilinen alternatif yollarla veya şifre çözücü ile çözülür.
-  // Gelişmiş AES-CBC ve PBKDF2-HMAC-SHA512 implementasyonu:
-  try {
-    log("Payload şifresi çözülüyor... K: " + kStr);
-    // Buradaki AES-CBC ve PBKDF2 işlevselliği için gerekli bloklar:
-    return null;
-  } catch (e) {
-    log("AES decrypt hata: " + e);
-    return null;
-  }
-}
-
-function parseNpConfig(html) {
-  var idx = html.indexOf('NP_CONFIG');
-  if (idx === -1) return null;
-  var eq = html.indexOf('=', idx);
-  var brace = eq !== -1 ? html.indexOf('{', eq) : -1;
-  if (brace === -1) return null;
-  try {
-    var substr = html.slice(brace, brace + 5000);
-    var count = 0, endIdx = -1;
-    for (var i = 0; i < substr.length; i++) {
-      if (substr[i] === '{') count++;
-      else if (substr[i] === '}') {
-        count--;
-        if (count === 0) { endIdx = i + 1; break; }
-      }
-    }
-    if (endIdx > 0) {
-      return JSON.parse(substr.slice(0, endIdx));
-    }
-  } catch (e) {}
-  return null;
-}
-
 function resolveEmbedPlayer(iframeHtml, iframeUrl) {
   var subs = [];
   var seen = {};
   var masterUrl = null;
 
-  var npCfg = parseNpConfig(iframeHtml);
-  if (npCfg && npCfg.sources) {
-    var srcs = npCfg.sources.filter(function(s) { return s && s.master; });
-    if (srcs.length > 0) {
-      var chosen = srcs.filter(function(s) { return s.kind === 'orig'; })[0] || srcs[0];
-      masterUrl = chosen.master.replace(/\\\/g, "/");
-    }
-    if (npCfg.subtitles) {
-      npCfg.subtitles.forEach(function(item) {
-        var f = typeof item === 'object' ? (item.file || item.url || item.src) : item;
-        var lbl = typeof item === 'object' ? (item.label || item.title || item.lang || "Türkçe") : "Türkçe";
-        if (f) {
-          var fullSub = urljoin(iframeUrl, f.replace(/\\\/g, "/"));
-          if (!seen[fullSub]) {
-            seen[fullSub] = 1;
-            subs.push({ label: lbl, lang: "tr", forced: false, url: fullSub });
-          }
-        }
-      });
-    }
-  }
-
-  if (!masterUrl) {
-    var m3uMatch = /file\s*:\s*["']([^"']+\.m3u8[^"']*)["']/.exec(iframeHtml) || /(https?:\/\/[^"'<>\s]+\.m3u8[^"'<>\s]*)/.exec(iframeHtml);
-    if (m3uMatch) {
-      masterUrl = m3uMatch[1].replace(/\\\/g, "/");
-    }
+  var m3uMatch = /file\s*:\s*["']([^"']+\.m3u8[^"']*)["']/.exec(iframeHtml) || /(https?:\/\/[^"'<>\s]+\.m3u8[^"'<>\s]*)/.exec(iframeHtml);
+  if (m3uMatch) {
+    masterUrl = m3uMatch[1].replace(/\\\/g, "/");
   }
 
   var subRe = /["']?(?:file|src)["']?\s*:\s*["']([^"']+\.vtt[^"']*)["']/g, sm;
@@ -213,11 +108,7 @@ function resolve(req) {
   }
 
   if (!targetUrl) {
-    var payloadInfo = extractEncFromHtml(html);
-    if (payloadInfo) {
-      log("Encrypted payload ve k key bulundu, ancak AES-CBC çözümü bekleniyor.");
-    }
-    throw new Error("Selçukflix şifreli payload veya master.m3u8 çözülemedi.");
+    throw new Error("Selçukflix master.m3u8 bağlantısı çözülemedi.");
   }
 
   log("Bulunan master URL: " + targetUrl);
@@ -225,7 +116,7 @@ function resolve(req) {
   return {
     url: targetUrl,
     referer: pageUrl,
-     subs: subs,
+    subs: subs,
     name: raw,
     ttl: 3600,
     subsMode: "single"
