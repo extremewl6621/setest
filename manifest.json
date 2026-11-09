@@ -17,6 +17,14 @@
       "file": "providers/hdfilmizlebest.js",
       "baseUrl": "https://www.hdfilmizle.best",
       "enabled": true
+    },
+    {
+      "id": "selcukflix",
+      "name": "Selçukflix",
+      "version": "1.0.0",
+      "file": "providers/selcukflix.js",
+      "baseUrl": "https://selcukflix.app",
+      "enabled": true
     }
   ]
 }
