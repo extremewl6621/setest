@@ -1,7 +1,7 @@
-/* Selçukflix sağlayıcısı (selcukflix.py'nin tam JS karşılığı — PoW ve AES-CBC dahil) */
+/* Selçukflix sağlayıcısı (selcukflix.py'nin tam JS karşılığı — PoW, AES-CBC ve cf_clearance dahil) */
 var BASE = "https://selcukflix.app";
 var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
-var CF_CLEARANCE = "";
+var CF_CLEARANCE = "CrHG_xzT1SDQuAVqLhoLC1TnaXav95T3s9PBWBHyVWqct2p83FmhdL4DpsTr3bNhhzTeUQ2okZSZeFGgsD7bd1kldOekVaKPcqcD3bXyPdpGx2Y0B7rCGYlX0RrTz-twudPvo8_NE1zuc8BzkesE0j6iJBSholKxUKHiU6CrBfQtEHRbEDD7p00lVvy3caitJm-woJMdTJs4bMRf-Cb4lb3bdfOkGgcyEqRyMm5l8Hq1VYF-kf6DRj3g6StRgBnkerGwDiJWu_inF3QkoXzsV5c-1ucrvDn08bfdSys7z01JS77ZD9_B21k2X-Or1N80_EebC-psPQ";
 var DEFAULT_PICHIVE_REFERER = "https://four.pichive.online/";
 
 function log(m) { host.log("[selcuk] " + m); }
@@ -144,7 +144,7 @@ var POW_SALT_BYTES = utf8Bytes("q0Q7APE1FI");
 function solvePow(gateN, maxIter) {
   if (!gateN) return "";
   maxIter = maxIter || 5000000;
-  var pipe = [0x7C]; // '|'
+  var pipe = [0x7C];
   var gateBytes = utf8Bytes(gateN);
   for (var n = 0; n < maxIter; n++) {
     var ns = utf8Bytes(String(n));
@@ -164,7 +164,7 @@ function appendPow(url, powAns) {
 }
 
 // ============================================================================
-// SHA-512 + HMAC-SHA512 + PBKDF2-SHA512 + AES-CBC (saf JS)
+// SHA-512 + HMAC-SHA512 + PBKDF2-SHA512 + AES-CBC
 // ============================================================================
 var SHA512_K = [
   0x428a2f98,0xd728ae22,0x71374491,0x23ef65cd,0xb5c0fbcf,0xec4d3b2f,0xe9b5dba5,0x8189dbbc,
@@ -188,7 +188,6 @@ var SHA512_K = [
   0x28db77f5,0x23047d84,0x32caab7b,0x40c72493,0x3c9ebe0a,0x15c9bebc,0x431d67c4,0x9c100d4c,
   0x4cc5d4be,0xcb3e42b6,0x597f299c,0xfc657e2a,0x5fcb6fab,0x3ad6faec,0x6c44198c,0x4a475817
 ];
-function _u64(h, l) { return [h >>> 0, l >>> 0]; }
 function _add64(a, b) { var lo = (a[1] + b[1]) >>> 0; var c = lo < a[1] ? 1 : 0; return [ (a[0] + b[0] + c) >>> 0, lo ]; }
 function _rotr64(x, n) { var h = x[0], l = x[1]; if (n < 32) return [ ((h>>>n)|(l<<(32-n)))>>>0, ((l>>>n)|(h<<(32-n)))>>>0 ]; n -= 32; return [ ((l>>>n)|(h<<(32-n)))>>>0, ((h>>>n)|(l<<(32-n)))>>>0 ]; }
 function sha512(bytes) {
@@ -322,23 +321,22 @@ function decryptEncPayload(enc, k) {
 }
 
 function extractEncFromHtml(html) {
-  var m = /\\"enc\\"\s*:\s*\{\s*\\"ciphertext\\"\s*:\s*\\"([^"\\]+)\\"\s*,\s*\\"iv\\"\s*:\s*\\"([^"\\]+)\\"\s*,\s*\\"salt\\"\s*:\s*\\"([^"\\]+)\\"/.exec(html);
-  if (!m) m = /"enc"\s*:\s*\{\s*"ciphertext"\s*:\s*"([^"]+)"\s*,\s*"iv"\s*:\s*"([^"]+)"\s*,\s*"salt"\s*:\s*"([^"]+)"/.exec(html);
+  var m = /"enc"\s*:\s*\{\s*"ciphertext"\s*:\s*"([^"]+)"\s*,\s*"iv"\s*:\s*"([^"]+)"\s*,\s*"salt"\s*:\s*"([^"]+)"/.exec(html);
   if (!m) return null;
   var enc = { ciphertext: m[1], iv: m[2], salt: m[3] };
   var after = html.substr(m.index + m[0].length, 800);
-  var km = /\\"k\\"\s*:\s*\\"([^"\\]{10,80})\\"/.exec(after) || /"k"\s*:\s*"([^"]{10,80})"/.exec(after);
+  var km = /"k"\s*:\s*"([^"]{10,80})"/.exec(after);
   if (!km) {
     var before = html.substr(Math.max(0, m.index - 800), 800);
-    km = /\\"k\\"\s*:\s*\\"([^"\\]{10,80})\\"/.exec(before) || /"k"\s*:\s*"([^"]{10,80})"/.exec(before);
+    km = /"k"\s*:\s*"([^"]{10,80})"/.exec(before);
   }
   return km ? { enc: enc, k: km[1] } : null;
 }
 
 function extractDurationSeconds(html) {
-  var m = /\\?"runtimeMin\\?"\s*:\s*(\d+)/.exec(html);
+  var m = /"runtimeMin"\s*:\s*(\d+)/.exec(html);
   if (m) return parseInt(m[1], 10) * 60;
-  m = /\\?"timeRequired\\?"\s*:\s*\\?"PT(?:(\d+)H)?(?:(\d+)M)?/.exec(html);
+  m = /"timeRequired"\s*:\s*"PT(?:(\d+)H)?(?:(\d+)M)?"/.exec(html);
   if (m) return (parseInt(m[1]||"0",10)*3600) + (parseInt(m[2]||"0",10)*60);
   return null;
 }
@@ -435,8 +433,7 @@ function videoHeaders(targetUrl, referer, isIframe) {
       "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "cors", "Sec-Fetch-Site": "cross-site", "Connection": "keep-alive"
     };
   }
-  var check = tHost + " " + rHost;
-  if (/pichive|hotlinger|dplayer|cfd|selcukflix/.test(check) && CF_CLEARANCE) {
+  if (CF_CLEARANCE) {
     h["Cookie"] = "cf_clearance=" + CF_CLEARANCE;
   }
   return h;
@@ -565,18 +562,27 @@ function resolve(req) {
     try {
       log("deneniyor " + pageUrl);
       var pageRes = host.fetch(pageUrl, { headers: videoHeaders(pageUrl, BASE + "/"), timeout: 20 });
+      log("sayfa yanıt durumu: " + pageRes.status);
       if (pageRes.status !== 200) continue;
 
       var html = pageRes.text || "";
       var encData = extractEncFromHtml(html);
-      if (!encData) continue;
+      if (!encData) {
+        log("encData bulunamadı: " + pageUrl);
+        continue;
+      }
 
       var iframeRaw = decryptEncPayload(encData.enc, encData.k);
-      if (!iframeRaw) continue;
+      if (!iframeRaw) {
+        log("iframeRaw çözülemedi");
+        continue;
+      }
       if (!/^(https?:|\/\/)/.test(iframeRaw)) continue;
 
       var iframeUrl = iframeRaw.indexOf("//") === 0 ? "https:" + iframeRaw : iframeRaw;
       var duration = extractDurationSeconds(html);
+
+      log("iframeUrl çözüldü: " + iframeUrl);
 
       var iframeRes = host.fetch(iframeUrl, { headers: videoHeaders(iframeUrl, pageUrl, true), timeout: 20 });
       if (iframeRes.status !== 200) {
@@ -614,7 +620,7 @@ function resolve(req) {
       var used = {}, normSubs = [];
       for (var k = 0; k < resolved.subs.length; k++) {
         var g = guessSubLangForced(resolved.subs[k].label, resolved.subs[k].url);
-        normSubs.previousPush || normSubs.push({
+        normSubs.push({
           label: subDisplayName(g.lang, g.forced, used),
           lang: g.lang,
           forced: g.forced,
