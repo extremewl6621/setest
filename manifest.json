@@ -19,11 +19,19 @@
       "enabled": true
     },
     {
-      "id": "selcukflix",
+      "id": "selcuk",
       "name": "Selçukflix",
       "version": "1.0.0",
-      "file": "providers/selcukflix.js",
+      "file": "providers/selcuk.js",
       "baseUrl": "https://selcukflix.app",
+      "enabled": true
+    },
+    {
+      "id": "mediafire",
+      "name": "MediaFire",
+      "version": "1.0.0",
+      "file": "providers/mediafire.js",
+      "baseUrl": "https://www.mediafire.com",
       "enabled": true
     }
   ]
