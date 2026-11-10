@@ -1,0 +1,14 @@
+{
+  "name": "Yerel IPTV Sağlayıcıları",
+  "version": "1.2.0",
+  "lib": "lib/common.js",
+  "providers": [
+    {
+      "id": "tube",
+      "name": "Tube (YouTube canlı + TV)",
+      "version": "1.2.0",
+      "file": "providers/tube.js",
+      "baseUrl": "https://tube.svp.com.tr"
+    }
+  ]
+}
